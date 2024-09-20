@@ -33,7 +33,7 @@ jobs:
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        wget "${{ steps.get_release.outputs.zip_asset_url }}" -P release-assets
+        wget "${{ steps.get_release.outputs.zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
         wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
         wget "${{ steps.get_release.outputs.nlp }}" -P release-assets       
