@@ -34,6 +34,9 @@ jobs:
           fi
         done
 
+    - name: List downloaded files
+      run: ls -l release-assets
+
     - name: rename nlpl.exe to nlp.exe
       run: mv release-assets/nlpl.exe release-assets/nlp.exe
       
