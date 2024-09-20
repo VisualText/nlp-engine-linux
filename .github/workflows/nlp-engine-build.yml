@@ -32,18 +32,23 @@ jobs:
 
     - name: Download release assets to release-assets directory
       run: |
-        wget -O "${{ steps.get_release.outputs.zip }}"
-        wget -O "${{ steps.get_release.outputs.icu1 }}"
-        wget -O "${{ steps.get_release.outputs.icu2 }}"
-        wget -O "${{ steps.get_release.outputs.nlp }}"   
+        mkdir release-assets
+        wget "${{ steps.get_release.outputs.zip_asset_url }}" -P release-assets
+        wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
+        wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
+        wget "${{ steps.get_release.outputs.nlp }}" -P release-assets       
       shell: bash
-      
+
     - name: rename nlpl.exe to nlp.exe
       run: mv release-assets/nlpl.exe release-assets/nlp.exe
       
     - name: Unzip the nlpengine.zip
       run: |
-        unzip -o nlpengine.zip
+        unzip release-assets/nlpengine.zip -d release-assets
+
+    - name: Copy assets to repository overwiriting existing files
+      run: |
+        cp -r release-assets/* .
 
     - name: Commit and push changes
       run: |
