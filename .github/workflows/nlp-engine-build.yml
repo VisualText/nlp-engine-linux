@@ -38,11 +38,7 @@ jobs:
         wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
         wget "${{ steps.get_release.outputs.nlp }}" -P release-assets        
       shell: bash
-
-    - name: List runner workspace
-      run: find $RUNNER_WORKSPACE
-      shell: bash
-
+      
     - name: rename nlpl.exe to nlp.exe
       run: mv release-assets/nlpl.exe release-assets/nlp.exe
       
