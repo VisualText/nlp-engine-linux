@@ -27,7 +27,7 @@ jobs:
       run: |
         mkdir release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
-          wget "$asset" -P release-assets
+          echo "Downloading $asset"
         done
       shell: bash
 
