@@ -27,9 +27,7 @@ jobs:
       run: |
         mkdir -p release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
-          # if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
           wget -P release-assets $asset
-          # fi
         done
 
     - name: List runner workspace
