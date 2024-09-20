@@ -48,6 +48,9 @@ jobs:
 
     - name: Copy assets to repository overwiriting existing files
       run: |
+        rm -rf *.a
+        rm -rf nlp.exe
+        rm -rf data
         cp -r release-assets/* .
 
     - name: Commit and push changes
