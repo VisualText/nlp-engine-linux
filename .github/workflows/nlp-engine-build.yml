@@ -50,7 +50,9 @@ jobs:
       run: |
         rm -rf *.a
         rm -rf nlp.exe
+        rm -rf nlpengine.zip
         rm -rf data
+        rm -rf release-assets
         cp -r release-assets/* .
 
     - name: Commit and push changes
