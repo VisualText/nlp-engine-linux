@@ -20,10 +20,9 @@ jobs:
             owner: 'VisualText',
             repo: 'nlp-engine'
           });
-          const tag_name = latestRelease.data.tag_name,
-          const assets = latestRelease.data.assets.map(asset => asset.browser_download_url);
-          console.log(`assets: ${assets}`);
-  
+          core.setOutput('tag_name', latestRelease.data.tag_name);
+          core.setOutput('assets', latestRelease.data.assets.map(asset => asset.browser_download_url));
+
     - name: Download release assets
       run: |
         mkdir -p release-assets
