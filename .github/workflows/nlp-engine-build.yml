@@ -1,9 +1,7 @@
 name: Update NLP Engine Files
 
 on:
-  push:
-    tags:
-    - '*'
+  workflow_dispatch:
 
 jobs:
   update-files:
@@ -54,5 +52,12 @@ jobs:
         git add .
         git commit -m "Update NLP Engine files to latest release ${{ steps.get_release.outputs.tag_name }}"
         git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Tag this repository with the latest release version
+      run: |
+        git tag ${{ steps.get_release.outputs.tag_name }}
+        git push origin ${{ steps.get_release.outputs.tag_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
