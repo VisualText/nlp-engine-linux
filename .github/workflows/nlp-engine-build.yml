@@ -34,8 +34,9 @@ jobs:
           fi
         done
 
-    - name: List downloaded files
-      run: ls -l release-assets
+    - name: List runner workspace
+      run: find $RUNNER_WORKSPACE
+      shell: bash
 
     - name: rename nlpl.exe to nlp.exe
       run: mv release-assets/nlpl.exe release-assets/nlp.exe
