@@ -32,11 +32,10 @@ jobs:
 
     - name: Download release assets to release-assets directory
       run: |
-        mkdir release-assets
-        wget "${{ steps.get_release.outputs.zip }}" -P release-assets
-        wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
-        wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
-        wget "${{ steps.get_release.outputs.nlp }}" -P release-assets        
+        wget -O "${{ steps.get_release.outputs.zip }}"
+        wget -O "${{ steps.get_release.outputs.icu1 }}"
+        wget -O "${{ steps.get_release.outputs.icu2 }}"
+        wget -O "${{ steps.get_release.outputs.nlp }}"   
       shell: bash
       
     - name: rename nlpl.exe to nlp.exe
@@ -44,11 +43,7 @@ jobs:
       
     - name: Unzip the nlpengine.zip
       run: |
-        unzip release-assets/nlpengine.zip -d release-assets
-
-    - name: Copy assets to repository
-      run: |
-        cp -r release-assets/* .
+        unzip -o nlpengine.zip
 
     - name: Commit and push changes
       run: |
@@ -66,3 +61,10 @@ jobs:
         git push origin ${{ steps.get_release.outputs.tag_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create a release for this repository using the name "Release tag_name"
+      run: |
+        curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$GITHUB_REPOSITORY/releases -d "{\"tag_name\":\"${{ steps.get_release.outputs.tag_name }}\",\"name\":\"Release ${{ steps.get_release.outputs.tag_name }}\"}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
