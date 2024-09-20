@@ -27,8 +27,9 @@ jobs:
       run: |
         mkdir release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
-          echo $asset
+          wget $asset -P release-assets
         done
+      shell: bash
 
     - name: List runner workspace
       run: find $RUNNER_WORKSPACE
