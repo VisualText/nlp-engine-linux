@@ -21,17 +21,22 @@ jobs:
             repo: 'nlp-engine'
           });
           core.setOutput('tag_name', latestRelease.data.tag_name);
-          core.setOutput('assets', latestRelease.data.assets.map(asset => asset.browser_download_url));
+          const zipAsset = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpengine.zip'));
+          core.setOutput('zip_asset_url', zipAsset.browser_download_url);
+          const icu1 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicutu.a'));
+          core.setOutput('icu1', icu1.browser_download_url);
+          const icu2 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicuuc.a'));
+          core.setOutput('icu2', icu2.browser_download_url);
+          const nlp = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpl.exe'));
+          core.setOutput('nlp', nlp.browser_download_url);
 
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        IFS=$'\n' read -d '' -r -a assets <<< "${{ steps.get_release.outputs.assets }}"
-        for asset in "${assets[@]}"; do
-          if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
-            curl -L -o release-assets/$(basename $asset) $asset
-          fi
-        done
+        wget $${{ steps.get_release.outputs.zipAsset }} -P release-assets
+        wget $${{ steps.get_release.outputs.icu1 }} -P release-assets
+        wget $${{ steps.get_release.outputs.icu2 }} -P release-assets
+        wget $${{ steps.get_release.outputs.nlp }} -P release-assets       
       shell: bash
 
     - name: List runner workspace
