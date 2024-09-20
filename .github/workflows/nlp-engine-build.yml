@@ -21,7 +21,7 @@ jobs:
             repo: 'nlp-engine'
           });
           core.setOutput('tag_name', latestRelease.data.tag_name);
-          core.setOutput('assets', latestRelease.data.assets.map(asset => `"${asset.browser_download_url}"`));
+          core.setOutput('assets', latestRelease.data.assets.map(asset => asset.browser_download_url}));
 
     - name: Download release assets to release-assets directory
       run: |
