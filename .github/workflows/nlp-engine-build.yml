@@ -28,8 +28,10 @@ jobs:
         mkdir release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
           if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
-          wget -P release-assets $asset
+            echo "Downloading $(basename $asset) $asset"
+            curl -L -o release-assets/$(basename $asset) $asset
           fi
+
         done
 
     - name: List runner workspace
