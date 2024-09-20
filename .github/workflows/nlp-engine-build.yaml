@@ -1,0 +1,44 @@
+name: Download and Sync Files
+
+on:
+  push:
+    tags:
+    - '*'
+
+jobs:
+  download-and-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout this repository
+      uses: actions/checkout@v2
+
+    - name: Get latest release info from VisualText/nlp-engine
+      id: get_release
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const latestRelease = await github.repos.getLatestRelease({
+            owner: 'VisualText',
+            repo: 'nlp-engine'
+          });
+          return latestRelease.data;
+
+    - name: Download release assets
+      run: |
+        mkdir -p release-assets
+        for asset in $(echo ${{ steps.get_release.outputs.assets }} | jq -r '.[] | .browser_download_url'); do
+          if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
+          wget -P release-assets $asset
+          fi
+        done
+
+    - name: rename nlpl.exe to nlp.exe
+      run: mv release-assets/nlpl.exe release-assets/nlp.exe
+
+    - name: Unzip the nlpengine.zip
+      run: |
+        unzip release-assets/nlpengine.zip -d release-assets
+
+    - name: List downloaded files
+      run: ls -la release-assets
