@@ -33,10 +33,10 @@ jobs:
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        wget $${{ steps.get_release.outputs.zipAsset }} -P release-assets
-        wget $${{ steps.get_release.outputs.icu1 }} -P release-assets
-        wget $${{ steps.get_release.outputs.icu2 }} -P release-assets
-        wget $${{ steps.get_release.outputs.nlp }} -P release-assets       
+        wget "${{ steps.get_release.outputs.zipAsset }}" -P release-assets
+        wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
+        wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
+        wget "${{ steps.get_release.outputs.nlp }}" -P release-assets        
       shell: bash
 
     - name: List runner workspace
