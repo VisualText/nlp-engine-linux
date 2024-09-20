@@ -21,8 +21,8 @@ jobs:
             repo: 'nlp-engine'
           });
           core.setOutput('tag_name', latestRelease.data.tag_name);
-          const zipAsset = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpengine.zip'));
-          core.setOutput('zip_asset_url', zipAsset.browser_download_url);
+          const zip = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpengine.zip'));
+          core.setOutput('zip', zip.browser_download_url);
           const icu1 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicutu.a'));
           core.setOutput('icu1', icu1.browser_download_url);
           const icu2 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicuuc.a'));
@@ -33,7 +33,7 @@ jobs:
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        wget "${{ steps.get_release.outputs.zipAsset }}" -P release-assets
+        wget "${{ steps.get_release.outputs.zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
         wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
         wget "${{ steps.get_release.outputs.nlp }}" -P release-assets        
