@@ -44,7 +44,7 @@ jobs:
       
     - name: Unzip the nlpengine.zip
       run: |
-        unzip release-assets/nlpengine.zip -d release-assets
+        unzip -o release-assets/nlpengine.zip -d release-assets
 
     - name: Copy assets to repository overwiriting existing files
       run: |
