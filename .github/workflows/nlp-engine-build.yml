@@ -26,7 +26,7 @@ jobs:
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        for asset in ${{ steps.get_release.outputs.assets }}; do
+        for asset in "${{ steps.get_release.outputs.assets}}[@]"; do
           echo "Downloading $asset"
         done
       shell: bash
