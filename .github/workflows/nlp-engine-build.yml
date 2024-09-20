@@ -27,8 +27,7 @@ jobs:
       run: |
         mkdir release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
-          echo "Downloading $(basename $asset) $asset"
-          curl -L -o release-assets/$(basename $asset) $asset
+          echo $asset
         done
 
     - name: List runner workspace
