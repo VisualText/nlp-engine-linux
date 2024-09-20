@@ -20,6 +20,8 @@ jobs:
             owner: 'VisualText',
             repo: 'nlp-engine'
           });
+          console.log(`tag: ${latestRelease.data.tag_name}`);
+          console.log(`assets: ${latestRelease.data.assets}`);
           return {
             tag_name: latestRelease.data.tag_name,
             assets: latestRelease.data.assets.map(asset => asset.browser_download_url)
