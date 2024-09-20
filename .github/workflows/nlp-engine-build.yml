@@ -23,13 +23,11 @@ jobs:
           core.setOutput('tag_name', latestRelease.data.tag_name);
           core.setOutput('assets', latestRelease.data.assets.map(asset => asset.browser_download_url));
 
-    - name: Download release assets
+    - name: Download release assets to release-assets directory
       run: |
-        mkdir -p release-assets
+        mkdir release-assets
         for asset in ${{ steps.get_release.outputs.assets }}; do
-          if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
-          wget -P release-assets $asset
-          fi
+          curl -L -o release-assets/$(basename $asset) $asset
         done
 
     - name: List runner workspace
