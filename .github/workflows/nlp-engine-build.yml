@@ -26,8 +26,11 @@ jobs:
     - name: Download release assets to release-assets directory
       run: |
         mkdir release-assets
-        for asset in "${{ steps.get_release.outputs.assets}}[@]"; do
-          echo "Downloading $asset"
+        IFS=$'\n' read -d '' -r -a assets <<< "${{ steps.get_release.outputs.assets }}"
+        for asset in "${assets[@]}"; do
+          if [[ $asset == *"libicutu.a" || $asset == *"libicuuc.a" || $asset == *"nlpl.exe" || $asset == *"nlpengine.zip" ]]; then
+            curl -L -o release-assets/$(basename $asset) $asset
+          fi
         done
       shell: bash
 
