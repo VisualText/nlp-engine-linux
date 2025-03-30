@@ -63,7 +63,28 @@ jobs:
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         git add *.a data nlp.exe
 
+    - name: Check if branch is up to date
+      id: check_update
+      run: |
+        git fetch origin main
+        if git diff --quiet HEAD origin/main; then
+          echo "Branch is up to date"
+          echo "::set-output name=up_to_date::true"
+        else
+          echo "Branch is not up to date"
+          echo "::set-output name=up_to_date::false"
+        fi
+        
+    - name: Continue if branch is up to date
+      if: steps.check_update.outputs.up_to_date == 'true'
+      run: echo "Branch is up to date, continuing with the next steps..."
+  
+    - name: Continue if branch is not up to date
+      if: steps.check_update.outputs.up_to_date == 'false'
+      run: echo "Branch is not up to date, but continuing with the next steps..."
+
     - name: Commit and push changes
+      if: steps.check_update.outputs.up_to_date == 'false'
       run: |        
         git commit -m "Update NLP Engine files to latest release ${{ steps.get_release.outputs.tag_name }}"
         git push
@@ -82,4 +103,3 @@ jobs:
         curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$GITHUB_REPOSITORY/releases -d "{\"tag_name\":\"${{ steps.get_release.outputs.tag_name }}\",\"name\":\"Release ${{ steps.get_release.outputs.tag_name }}\"}"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
