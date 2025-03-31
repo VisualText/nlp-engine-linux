@@ -30,6 +30,9 @@ jobs:
           const nlp = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpl.exe'));
           core.setOutput('nlp', nlp.browser_download_url);
 
+    - name: Show latest release version
+      run: echo "Latest release version is ${{ steps.get_release.outputs.tag_name }}"
+
     - name: Download release assets to release-assets directory
       run: |
         mkdir -p release-assets
@@ -47,7 +50,12 @@ jobs:
         unzip -o release-assets/nlpengine.zip -d release-assets
         rm -rf release-assets/nlpengine.zip
 
-    - name: Copy assets to repository overwiriting existing files
+    - name: Debug before copy
+      run: |
+        echo "Current files in repository:"
+        ls -la
+
+    - name: Copy assets to repository overwriting existing files
       run: |
         rm -rf *.a
         rm -rf nlp.exe
@@ -56,34 +64,33 @@ jobs:
         rm -rf release-assets
         rm -rf nlpengine.zip
 
-    - name: Commit and push changes
+    - name: Debug after copy
+      run: |
+        echo "Files after copying:"
+        ls -la
+        echo "Git status:"
+        git status
+
+    - name: Configure Git
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add *.a data nlp.exe
 
-    - name: Check if branch is up to date
-      id: check_update
+    - name: Add and check for changes
+      id: check_changes
       run: |
-        git fetch origin main
-        if git diff --quiet HEAD origin/main; then
-          echo "Branch is up to date"
-          echo "::set-output name=up_to_date::true"
+        git add -A
+        if git diff --staged --quiet; then
+          echo "No changes detected in files"
+          echo "has_changes=false" >> $GITHUB_OUTPUT
         else
-          echo "Branch is not up to date"
-          echo "::set-output name=up_to_date::false"
+          echo "Changes detected in files"
+          git diff --staged --name-status
+          echo "has_changes=true" >> $GITHUB_OUTPUT
         fi
-        
-    - name: Continue if branch is up to date
-      if: steps.check_update.outputs.up_to_date == 'true'
-      run: echo "Branch is up to date, continuing with the next steps..."
-  
-    - name: Continue if branch is not up to date
-      if: steps.check_update.outputs.up_to_date == 'false'
-      run: echo "Branch is not up to date, but continuing with the next steps..."
 
     - name: Commit and push changes
-      if: steps.check_update.outputs.up_to_date == 'false'
+      if: steps.check_changes.outputs.has_changes == 'true'
       run: |        
         git commit -m "Update NLP Engine files to latest release ${{ steps.get_release.outputs.tag_name }}"
         git push
@@ -91,14 +98,21 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Tag this repository with the latest release version
+      if: steps.check_changes.outputs.has_changes == 'true'
       run: |
         git tag ${{ steps.get_release.outputs.tag_name }}
         git push origin ${{ steps.get_release.outputs.tag_name }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Create a release for this repository using the name "Release tag_name"
+    - name: Create a release for this repository
+      if: steps.check_changes.outputs.has_changes == 'true'
       run: |
         curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$GITHUB_REPOSITORY/releases -d "{\"tag_name\":\"${{ steps.get_release.outputs.tag_name }}\",\"name\":\"Release ${{ steps.get_release.outputs.tag_name }}\"}"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Report no changes
+      if: steps.check_changes.outputs.has_changes != 'true'
+      run: |
+        echo "No changes were detected. Repository already has the latest files from release ${{ steps.get_release.outputs.tag_name }}"
