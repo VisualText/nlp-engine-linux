@@ -23,22 +23,29 @@ jobs:
             repo: 'nlp-engine'
           });
           core.setOutput('tag_name', latestRelease.data.tag_name);
+          core.setOutput('release_id', latestRelease.data.id);
+          
           const zip = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpengine.zip'));
           core.setOutput('zip', zip.browser_download_url);
+          
           const icu1 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicutu.a'));
           core.setOutput('icu1', icu1.browser_download_url);
+          
           const icu2 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicuuc.a'));
           core.setOutput('icu2', icu2.browser_download_url);
+          
           const nlp = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpl.exe'));
           core.setOutput('nlp', nlp.browser_download_url);
 
     - name: Show latest release version
       run: echo "Latest release version is ${{ steps.get_release.outputs.tag_name }}"
 
-    # FIXED: Always update when manually triggered
     - name: Check if update is needed
       id: check_tag
       run: |
+        # Print event name for debugging
+        echo "Current event name: ${{ github.event_name }}"
+        
         # Always update if workflow_dispatch was manually triggered
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "Workflow manually triggered, forcing update"
@@ -54,6 +61,9 @@ jobs:
         # Show all existing tags for debugging
         echo "Existing tags:"
         git tag -l
+        
+        # Print the decision for clarity
+        echo "DECISION: update_needed=${{ steps.check_tag.outputs.update_needed || 'true' }}"
 
     - name: Download release assets to release-assets directory
       if: steps.check_tag.outputs.update_needed == 'true'
@@ -80,16 +90,67 @@ jobs:
       run: |
         echo "Current files in repository:"
         ls -la
+        
+        # Check if original files exist and get their checksums
+        echo "Original file checksums (if they exist):"
+        if [ -f "nlp.exe" ]; then
+          echo "Original nlp.exe exists, size: $(stat -c%s nlp.exe)"
+          md5sum nlp.exe
+        else
+          echo "Original nlp.exe does not exist"
+        fi
+        
+        if [ -f "libicutu.a" ]; then
+          echo "Original libicutu.a exists, size: $(stat -c%s libicutu.a)"
+          md5sum libicutu.a
+        else
+          echo "Original libicutu.a does not exist"
+        fi
+        
+        if [ -f "libicuuc.a" ]; then
+          echo "Original libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
+          md5sum libicuuc.a
+        else
+          echo "Original libicuuc.a does not exist"
+        fi
+        
+        # Check files in release-assets directory
+        echo "Downloaded file checksums:"
+        md5sum release-assets/nlp.exe
+        md5sum release-assets/libicutu.a
+        md5sum release-assets/libicuuc.a
 
     - name: Copy assets to repository overwriting existing files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
+        # First completely remove old files to avoid comparison issues
         rm -rf *.a
         rm -rf nlp.exe
         rm -rf data
+        
+        # Copy new files
         cp -r release-assets/* .
         rm -rf release-assets
-        rm -rf nlpengine.zip
+        
+        # Verify files were copied
+        echo "After copying, verifying files exist:"
+        if [ -f "nlp.exe" ]; then
+          echo "New nlp.exe exists, size: $(stat -c%s nlp.exe)"
+        else
+          echo "ERROR: nlp.exe was not copied!"
+        fi
+        
+        if [ -f "libicutu.a" ]; then
+          echo "New libicutu.a exists, size: $(stat -c%s libicutu.a)"
+        else
+          echo "ERROR: libicutu.a was not copied!"
+        fi
+        
+        if [ -f "libicuuc.a" ]; then
+          echo "New libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
+        else
+          echo "ERROR: libicuuc.a was not copied!"
+        fi
 
     - name: Debug after copy
       if: steps.check_tag.outputs.update_needed == 'true'
@@ -104,24 +165,68 @@ jobs:
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # Force git to see all files as changed
+        echo "Setting git config to force detects changes in binary files"
+        git config --global core.fileMode true
 
     - name: Add and check for changes
       if: steps.check_tag.outputs.update_needed == 'true'
       id: check_changes
       run: |
+        # List all files for debugging
+        echo "Current files in repository (after copy):"
+        ls -la
+        
+        # Add all changes to staging
         git add -A
+        
+        # Show git status for debugging
+        echo "Git status after git add -A:"
+        git status
+        
+        # Create a flag file to force a change
+        date > .version-flag
+        git add .version-flag
+        
+        # Check for staged changes
         if git diff --staged --quiet; then
           echo "No changes detected in files"
           echo "has_changes=false" >> $GITHUB_OUTPUT
+          
+          # Extra debugging for binary files
+          echo "Comparing binary files manually:"
+          if [ -f "nlp.exe" ]; then
+            echo "nlp.exe exists, size: $(stat -c%s nlp.exe)"
+            md5sum nlp.exe
+          fi
+          
+          if [ -f "libicutu.a" ]; then
+            echo "libicutu.a exists, size: $(stat -c%s libicutu.a)"
+            md5sum libicutu.a
+          fi
+          
+          if [ -f "libicuuc.a" ]; then
+            echo "libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
+            md5sum libicuuc.a
+          fi
         else
           echo "Changes detected in files"
           git diff --staged --name-status
           echo "has_changes=true" >> $GITHUB_OUTPUT
         fi
+        
+        # Print the decision for clarity
+        echo "DECISION: has_changes=${{ steps.check_changes.outputs.has_changes || 'false' }}"
+        
+        # Force has_changes to true when workflow_dispatch
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "Workflow manually triggered, forcing has_changes=true"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        fi
 
-    # FIXED: Force update tag if it exists
     - name: Force update tag if it exists
-      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && (steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch')
       run: |
         if git tag -l "${{ steps.get_release.outputs.tag_name }}" | grep -q .; then
           echo "Removing existing tag ${{ steps.get_release.outputs.tag_name }}"
@@ -130,7 +235,7 @@ jobs:
         fi
 
     - name: Commit and push changes
-      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && (steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch')
       run: |        
         git commit -m "Update NLP Engine files to latest release ${{ steps.get_release.outputs.tag_name }}"
         git push
@@ -138,7 +243,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Tag this repository with the latest release version
-      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && (steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch')
       run: |
         git tag ${{ steps.get_release.outputs.tag_name }}
         git push origin ${{ steps.get_release.outputs.tag_name }}
@@ -146,18 +251,22 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create a release for this repository
-      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
-      run: |
-        curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$GITHUB_REPOSITORY/releases -d "{\"tag_name\":\"${{ steps.get_release.outputs.tag_name }}\",\"name\":\"Release ${{ steps.get_release.outputs.tag_name }}\"}"
+      if: steps.check_tag.outputs.update_needed == 'true' && (steps.check_changes.outputs.has_changes == 'true' || github.event_name == 'workflow_dispatch')
+      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_release.outputs.tag_name }}
+        release_name: Release ${{ steps.get_release.outputs.tag_name }}
+        draft: false
+        prerelease: false
 
     - name: Report no changes
-      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes != 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes != 'true' && github.event_name != 'workflow_dispatch'
       run: |
         echo "No changes were detected. Repository already has the latest files from release ${{ steps.get_release.outputs.tag_name }}"
         
     - name: Report no update needed
-      if: steps.check_tag.outputs.update_needed != 'true'
+      if: steps.check_tag.outputs.update_needed != 'true' && github.event_name != 'workflow_dispatch'
       run: |
         echo "No update needed. Repository is already at version ${{ steps.get_release.outputs.tag_name }}"
