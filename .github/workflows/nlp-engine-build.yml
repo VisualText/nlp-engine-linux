@@ -10,6 +10,8 @@ jobs:
     steps:
     - name: Checkout this repository
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Fetch all history to properly check tags
 
     - name: Get latest release info from VisualText/nlp-engine
       id: get_release
@@ -33,7 +35,28 @@ jobs:
     - name: Show latest release version
       run: echo "Latest release version is ${{ steps.get_release.outputs.tag_name }}"
 
+    # FIXED: Always update when manually triggered
+    - name: Check if update is needed
+      id: check_tag
+      run: |
+        # Always update if workflow_dispatch was manually triggered
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "Workflow manually triggered, forcing update"
+          echo "update_needed=true" >> $GITHUB_OUTPUT
+        elif git tag -l "${{ steps.get_release.outputs.tag_name }}" | grep -q .; then
+          echo "Tag ${{ steps.get_release.outputs.tag_name }} already exists in this repo"
+          echo "update_needed=false" >> $GITHUB_OUTPUT
+        else
+          echo "Tag ${{ steps.get_release.outputs.tag_name }} does not exist, update needed"
+          echo "update_needed=true" >> $GITHUB_OUTPUT
+        fi
+        
+        # Show all existing tags for debugging
+        echo "Existing tags:"
+        git tag -l
+
     - name: Download release assets to release-assets directory
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         mkdir -p release-assets
         wget "${{ steps.get_release.outputs.zip }}" -P release-assets
@@ -43,19 +66,23 @@ jobs:
       shell: bash
 
     - name: rename nlpl.exe to nlp.exe
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: mv release-assets/nlpl.exe release-assets/nlp.exe
       
     - name: Unzip the nlpengine.zip
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         unzip -o release-assets/nlpengine.zip -d release-assets
         rm -rf release-assets/nlpengine.zip
 
     - name: Debug before copy
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         echo "Current files in repository:"
         ls -la
 
     - name: Copy assets to repository overwriting existing files
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         rm -rf *.a
         rm -rf nlp.exe
@@ -65,6 +92,7 @@ jobs:
         rm -rf nlpengine.zip
 
     - name: Debug after copy
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         echo "Files after copying:"
         ls -la
@@ -72,11 +100,13 @@ jobs:
         git status
 
     - name: Configure Git
+      if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
     - name: Add and check for changes
+      if: steps.check_tag.outputs.update_needed == 'true'
       id: check_changes
       run: |
         git add -A
@@ -89,8 +119,18 @@ jobs:
           echo "has_changes=true" >> $GITHUB_OUTPUT
         fi
 
+    # FIXED: Force update tag if it exists
+    - name: Force update tag if it exists
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        if git tag -l "${{ steps.get_release.outputs.tag_name }}" | grep -q .; then
+          echo "Removing existing tag ${{ steps.get_release.outputs.tag_name }}"
+          git tag -d ${{ steps.get_release.outputs.tag_name }}
+          git push origin :refs/tags/${{ steps.get_release.outputs.tag_name }} || true
+        fi
+
     - name: Commit and push changes
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
       run: |        
         git commit -m "Update NLP Engine files to latest release ${{ steps.get_release.outputs.tag_name }}"
         git push
@@ -98,7 +138,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Tag this repository with the latest release version
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
       run: |
         git tag ${{ steps.get_release.outputs.tag_name }}
         git push origin ${{ steps.get_release.outputs.tag_name }}
@@ -106,13 +146,18 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create a release for this repository
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes == 'true'
       run: |
         curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/$GITHUB_REPOSITORY/releases -d "{\"tag_name\":\"${{ steps.get_release.outputs.tag_name }}\",\"name\":\"Release ${{ steps.get_release.outputs.tag_name }}\"}"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Report no changes
-      if: steps.check_changes.outputs.has_changes != 'true'
+      if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes != 'true'
       run: |
         echo "No changes were detected. Repository already has the latest files from release ${{ steps.get_release.outputs.tag_name }}"
+        
+    - name: Report no update needed
+      if: steps.check_tag.outputs.update_needed != 'true'
+      run: |
+        echo "No update needed. Repository is already at version ${{ steps.get_release.outputs.tag_name }}"
