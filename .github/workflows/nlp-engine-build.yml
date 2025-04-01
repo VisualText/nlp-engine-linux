@@ -120,6 +120,27 @@ jobs:
         md5sum release-assets/libicutu.a
         md5sum release-assets/libicuuc.a
 
+    # New step: Force remove binary files using git rm
+    - name: Force remove all binary files
+      if: steps.check_tag.outputs.update_needed == 'true'
+      run: |
+        # Configure git for commits
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # Force remove binary files
+        echo "Removing binary files using git rm to ensure they're properly tracked..."
+        git rm -f *.a nlp.exe || true
+        git rm -f .version-flag || true
+        
+        # Commit the removal
+        git commit -m "Remove binary files before update to ${{ steps.get_release.outputs.tag_name }}" || echo "Nothing to commit - files may not exist yet"
+        git push || echo "Nothing to push"
+        
+        # Verify files were removed
+        echo "Current files after removal:"
+        ls -la
+
     - name: Copy assets to repository overwriting existing files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
@@ -178,16 +199,16 @@ jobs:
         echo "Current files in repository (after copy):"
         ls -la
         
+        # Create a version flag file to force change detection
+        date > .version-flag
+        echo "${{ steps.get_release.outputs.tag_name }}" >> .version-flag
+        
         # Add all changes to staging
         git add -A
         
         # Show git status for debugging
         echo "Git status after git add -A:"
         git status
-        
-        # Create a flag file to force a change
-        date > .version-flag
-        git add .version-flag
         
         # Check for staged changes
         if git diff --staged --quiet; then
