@@ -17,13 +17,11 @@ jobs:
       with:
         fetch-depth: 0  # Fetch all history to properly check tags
 
-    - name: Get latest release info from VisualText/nlp-engine
-      id: get_release
-      uses: actions/github-script@v6
-      with:
-        script: |
-            const fs = require('fs');
-            
+        - name: Get latest release info from VisualText/nlp-engine
+        id: get_release
+        uses: actions/github-script@v6
+        with:
+          script: |
             try {
               // Get tag from input or latest release
               let tagName = null;
@@ -39,8 +37,7 @@ jobs:
                 console.log(`Using latest release tag: ${tagName}`);
               }
               
-              // Use GitHub output file instead of core.setOutput
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag_name=${tagName}\n`);
+              core.setOutput('tag_name', tagName);
               
               // Get release by tag
               const releaseByTag = await github.rest.repos.getReleaseByTag({
@@ -67,18 +64,18 @@ jobs:
                 return asset;
               };
               
-              // Get platform specific assets
+              // Get Linux specific assets
               const zip = safeFindAsset('nlpengine.zip');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, `zip=${zip.browser_download_url}\n`);
+              core.setOutput('zip', zip.browser_download_url);
               
               const icu1 = safeFindAsset('libicutu.a');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, `icu1=${icu1.browser_download_url}\n`);
+              core.setOutput('icu1', icu1.browser_download_url);
               
               const icu2 = safeFindAsset('libicuuc.a');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, `icu2=${icu2.browser_download_url}\n`);
+              core.setOutput('icu2', icu2.browser_download_url);
               
               const nlp = safeFindAsset('nlpl.exe');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, `nlp=${nlp.browser_download_url}\n`);
+              core.setOutput('nlp', nlp.browser_download_url);
               
             } catch (error) {
               console.log('Error occurred:');
