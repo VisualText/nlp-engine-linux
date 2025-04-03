@@ -2,6 +2,10 @@ name: Update NLP Engine Files
 
 on:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to update to'
+        required: false
 
 jobs:
   update-files:
@@ -9,7 +13,7 @@ jobs:
 
     steps:
     - name: Checkout this repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0  # Fetch all history to properly check tags
 
@@ -18,24 +22,66 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          const latestRelease = await github.rest.repos.getLatestRelease({
-            owner: 'VisualText',
-            repo: 'nlp-engine'
-          });
-          core.setOutput('tag_name', latestRelease.data.tag_name);
-          core.setOutput('release_id', latestRelease.data.id);
-          
-          const zip = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpengine.zip'));
-          core.setOutput('zip', zip.browser_download_url);
-          
-          const icu1 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicutu.a'));
-          core.setOutput('icu1', icu1.browser_download_url);
-          
-          const icu2 = latestRelease.data.assets.find(asset => asset.name.endsWith('libicuuc.a'));
-          core.setOutput('icu2', icu2.browser_download_url);
-          
-          const nlp = latestRelease.data.assets.find(asset => asset.name.endsWith('nlpl.exe'));
-          core.setOutput('nlp', nlp.browser_download_url);
+          try {
+            // Get tag from input or latest release
+            let tagName = null;
+            if (context.payload.inputs && context.payload.inputs.tag_name) {
+              tagName = context.payload.inputs.tag_name;
+              console.log(`Using provided tag: ${tagName}`);
+            } else {
+              const latestRelease = await github.rest.repos.getLatestRelease({
+                owner: 'VisualText',
+                repo: 'nlp-engine'
+              });
+              tagName = latestRelease.data.tag_name;
+              console.log(`Using latest release tag: ${tagName}`);
+            }
+            
+            core.setOutput('tag_name', tagName);
+            
+            // Get release by tag
+            const releaseByTag = await github.rest.repos.getReleaseByTag({
+              owner: 'VisualText',
+              repo: 'nlp-engine',
+              tag: tagName
+            });
+            
+            // Log all assets to help debugging
+            console.log("Available assets in the release:");
+            releaseByTag.data.assets.forEach(asset => {
+              console.log(`- ${asset.name} (${asset.browser_download_url})`);
+            });
+            
+            // Safe find function that doesn't throw on undefined
+            const safeFindAsset = (pattern) => {
+              const asset = releaseByTag.data.assets.find(asset => 
+                asset.name.includes(pattern) || asset.name.endsWith(pattern)
+              );
+              if (!asset) {
+                console.log(`WARNING: Could not find asset matching pattern: ${pattern}`);
+                return { browser_download_url: null };
+              }
+              return asset;
+            };
+            
+            // Get Linux specific assets
+            const zip = safeFindAsset('nlpengine.zip');
+            core.setOutput('zip', zip.browser_download_url);
+            
+            const icu1 = safeFindAsset('libicutu.a');
+            core.setOutput('icu1', icu1.browser_download_url);
+            
+            const icu2 = safeFindAsset('libicuuc.a');
+            core.setOutput('icu2', icu2.browser_download_url);
+            
+            const nlp = safeFindAsset('nlpl.exe');
+            core.setOutput('nlp', nlp.browser_download_url);
+            
+          } catch (error) {
+            console.log('Error occurred:');
+            console.log(error);
+            core.setFailed(`Error fetching release data: ${error.message}`);
+          }
 
     - name: Show latest release version
       run: echo "Latest release version is ${{ steps.get_release.outputs.tag_name }}"
