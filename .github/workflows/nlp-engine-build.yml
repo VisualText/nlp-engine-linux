@@ -17,11 +17,11 @@ jobs:
       with:
         fetch-depth: 0  # Fetch all history to properly check tags
 
-        - name: Get latest release info from VisualText/nlp-engine
-        id: get_release
-        uses: actions/github-script@v6
-        with:
-          script: |
+    - name: Get latest release info from VisualText/nlp-engine
+      id: get_release
+      uses: actions/github-script@v6
+      with:
+        script: |
             try {
               // Get tag from input or latest release
               let tagName = null;
