@@ -2,10 +2,8 @@ name: Update NLP Engine Files
 
 on:
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Tag name to update to'
-        required: false
+  repository_dispatch:
+    types: [nlp-engine-release]
 
 jobs:
   update-files:
