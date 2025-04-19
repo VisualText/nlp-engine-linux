@@ -68,7 +68,7 @@ jobs:
                 return asset;
               };
               
-              // Find all Ubuntu zip files and nlpengine.zip
+              // Find all needed assets
               const ubuntu2004Zip = safeFindAsset('ubuntu-20.04.zip');
               core.setOutput('ubuntu2004Zip', ubuntu2004Zip.browser_download_url);
               
@@ -84,7 +84,7 @@ jobs:
               console.log('Error occurred:');
               console.log(error);
               core.setFailed(`Error fetching release data: ${error.message}`);
-            }  
+            }
 
     - name: Show latest release version
       run: echo "Latest release version is ${{ steps.get_release.outputs.tag_name }}"
@@ -119,53 +119,95 @@ jobs:
       run: |
         mkdir -p release-assets
         
-        # Download all Ubuntu zip files and nlpengine.zip
+        # Download all the required zip files
         wget "${{ steps.get_release.outputs.ubuntu2004Zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.ubuntu2204Zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.ubuntuLatestZip }}" -P release-assets
         wget "${{ steps.get_release.outputs.engineZip }}" -P release-assets
       shell: bash
 
-    - name: Extract files
+    - name: Process Ubuntu packages and extract files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
-        # Extract all zip files
-        unzip -o release-assets/ubuntu-20.04.zip -d ./
-        unzip -o release-assets/ubuntu-22.04.zip -d ./
-        unzip -o release-assets/ubuntu-latest.zip -d ./
+        # Create directories for each Ubuntu version
+        mkdir -p ubuntu-20.04
+        mkdir -p ubuntu-22.04
+        mkdir -p ubuntu-latest
+        
+        # Process Ubuntu 20.04
+        echo "Processing Ubuntu 20.04 files..."
+        unzip -o release-assets/ubuntu-20.04.zip -d temp-20.04
+        mv temp-20.04/ubuntu-20.04/* ubuntu-20.04/
+        rm -rf temp-20.04
+        
+        # Process Ubuntu 22.04
+        echo "Processing Ubuntu 22.04 files..."
+        unzip -o release-assets/ubuntu-22.04.zip -d temp-22.04
+        mv temp-22.04/ubuntu-22.04/* ubuntu-22.04/
+        rm -rf temp-22.04
+        
+        # Process Ubuntu Latest
+        echo "Processing Ubuntu Latest files..."
+        unzip -o release-assets/ubuntu-latest.zip -d temp-latest
+        mv temp-latest/ubuntu-latest/* ubuntu-latest/
+        rm -rf temp-latest
+        
+        # For each Ubuntu version, rename nlpl.exe to nlp.exe and extract icu-libs.zip
+        for version in ubuntu-20.04 ubuntu-22.04 ubuntu-latest; do
+          echo "Processing files in $version..."
+          
+          # Rename nlpl.exe to nlp.exe if it exists
+          if [ -f "$version/nlpl.exe" ]; then
+            echo "Renaming $version/nlpl.exe to $version/nlp.exe"
+            mv "$version/nlpl.exe" "$version/nlp.exe"
+          fi
+          
+          # Extract icu-libs.zip if it exists
+          if [ -f "$version/icu-libs.zip" ]; then
+            echo "Extracting $version/icu-libs.zip"
+            unzip -o "$version/icu-libs.zip" -d "$version"
+            # Remove the zip file after extraction
+            rm "$version/icu-libs.zip"
+          fi
+          
+          # List files for verification
+          echo "Files in $version directory:"
+          ls -la "$version"
+        done
+        
+        # Extract nlpengine.zip to the root directory
+        echo "Extracting nlpengine.zip to root directory..."
         unzip -o release-assets/nlpengine.zip -d ./
         
-        # List files for debugging
-        echo "Files extracted:"
+        # Clean up
+        rm -rf release-assets
+        
+        # List root directory files
+        echo "Root directory files:"
         ls -la
-        echo "Ubuntu 20.04 files:"
-        ls -la ubuntu-20.04 || echo "ubuntu-20.04 directory not found"
-        echo "Ubuntu 22.04 files:"
-        ls -la ubuntu-22.04 || echo "ubuntu-22.04 directory not found"
-        echo "Ubuntu latest files:"
-        ls -la ubuntu-latest || echo "ubuntu-latest directory not found"
+        
+        # List data directory files if exists
+        if [ -d "data" ]; then
+          echo "Files in data directory:"
+          ls -la data
+        fi
 
-    - name: Debug before copy
-      if: steps.check_tag.outputs.update_needed == 'true'
-      run: |
-        echo "Current files in repository:"
-        ls -la
-
-    # Force remove binary files using git rm
-    - name: Force remove all binary files
+    # Force remove individual binary files using git rm
+    - name: Force remove old binary files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         # Configure git for commits
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # Force remove binary files and directories
-        echo "Removing binary files using git rm to ensure they're properly tracked..."
-        git rm -rf --ignore-unmatch *.a nlp.exe ubuntu-20.04 ubuntu-22.04 ubuntu-latest data || true
+        # Force remove binary files - DO NOT REMOVE data directory!
+        echo "Removing old binary files using git rm to ensure they're properly tracked..."
+        git rm -f --ignore-unmatch *.a nlp.exe || true
+        git rm -rf --ignore-unmatch ubuntu-20.04 ubuntu-22.04 ubuntu-latest || true
         git rm -f .version-flag || true
         
         # Commit the removal
-        git commit -m "Remove binary files before update to ${{ steps.get_release.outputs.tag_name }}" || echo "Nothing to commit - files may not exist yet"
+        git commit -m "Remove old binary files before update to ${{ steps.get_release.outputs.tag_name }}" || echo "Nothing to commit - files may not exist yet"
         git push || echo "Nothing to push"
         
         # Verify files were removed
