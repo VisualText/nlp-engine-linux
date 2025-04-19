@@ -21,12 +21,18 @@ jobs:
       with:
         script: |
             try {
-              // Get tag from input or latest release
+              // Get tag from input or repository dispatch
               let tagName = null;
-              if (context.payload.inputs && context.payload.inputs.tag_name) {
+              
+              // Check for repository dispatch first
+              if (context.payload.client_payload && context.payload.client_payload.tag_name) {
+                tagName = context.payload.client_payload.tag_name;
+                console.log(`Using tag from repository dispatch: ${tagName}`);
+              } else if (context.payload.inputs && context.payload.inputs.tag_name) {
                 tagName = context.payload.inputs.tag_name;
                 console.log(`Using provided tag: ${tagName}`);
               } else {
+                // Fall back to latest release
                 const latestRelease = await github.rest.repos.getLatestRelease({
                   owner: 'VisualText',
                   repo: 'nlp-engine'
@@ -62,19 +68,18 @@ jobs:
                 return asset;
               };
               
-              // Get Linux specific assets
-              const zip = safeFindAsset('nlpengine.zip');
-              core.setOutput('zip', zip.browser_download_url);
+              // Find all Ubuntu zip files and nlpengine.zip
+              const ubuntu2004Zip = safeFindAsset('ubuntu-20.04.zip');
+              core.setOutput('ubuntu2004Zip', ubuntu2004Zip.browser_download_url);
               
-              const icu1 = safeFindAsset('libicutu.a');
-              core.setOutput('icu1', icu1.browser_download_url);
+              const ubuntu2204Zip = safeFindAsset('ubuntu-22.04.zip');
+              core.setOutput('ubuntu2204Zip', ubuntu2204Zip.browser_download_url);
               
-              const icu2 = safeFindAsset('libicuuc.a');
-              core.setOutput('icu2', icu2.browser_download_url);
+              const ubuntuLatestZip = safeFindAsset('ubuntu-latest.zip');
+              core.setOutput('ubuntuLatestZip', ubuntuLatestZip.browser_download_url);
               
-              const nlp = safeFindAsset('nlpl.exe');
-              core.setOutput('nlp', nlp.browser_download_url);
-              
+              const engineZip = safeFindAsset('nlpengine.zip');
+              core.setOutput('engineZip', engineZip.browser_download_url);
             } catch (error) {
               console.log('Error occurred:');
               console.log(error);
@@ -113,58 +118,40 @@ jobs:
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         mkdir -p release-assets
-        wget "${{ steps.get_release.outputs.zip }}" -P release-assets
-        wget "${{ steps.get_release.outputs.icu1 }}" -P release-assets
-        wget "${{ steps.get_release.outputs.icu2 }}" -P release-assets
-        wget "${{ steps.get_release.outputs.nlp }}" -P release-assets       
+        
+        # Download all Ubuntu zip files and nlpengine.zip
+        wget "${{ steps.get_release.outputs.ubuntu2004Zip }}" -P release-assets
+        wget "${{ steps.get_release.outputs.ubuntu2204Zip }}" -P release-assets
+        wget "${{ steps.get_release.outputs.ubuntuLatestZip }}" -P release-assets
+        wget "${{ steps.get_release.outputs.engineZip }}" -P release-assets
       shell: bash
 
-    - name: rename nlpl.exe to nlp.exe
-      if: steps.check_tag.outputs.update_needed == 'true'
-      run: mv release-assets/nlpl.exe release-assets/nlp.exe
-      
-    - name: Unzip the nlpengine.zip
+    - name: Extract files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
-        unzip -o release-assets/nlpengine.zip -d release-assets
-        rm -rf release-assets/nlpengine.zip
+        # Extract all zip files
+        unzip -o release-assets/ubuntu-20.04.zip -d ./
+        unzip -o release-assets/ubuntu-22.04.zip -d ./
+        unzip -o release-assets/ubuntu-latest.zip -d ./
+        unzip -o release-assets/nlpengine.zip -d ./
+        
+        # List files for debugging
+        echo "Files extracted:"
+        ls -la
+        echo "Ubuntu 20.04 files:"
+        ls -la ubuntu-20.04 || echo "ubuntu-20.04 directory not found"
+        echo "Ubuntu 22.04 files:"
+        ls -la ubuntu-22.04 || echo "ubuntu-22.04 directory not found"
+        echo "Ubuntu latest files:"
+        ls -la ubuntu-latest || echo "ubuntu-latest directory not found"
 
     - name: Debug before copy
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         echo "Current files in repository:"
         ls -la
-        
-        # Check if original files exist and get their checksums
-        echo "Original file checksums (if they exist):"
-        if [ -f "nlp.exe" ]; then
-          echo "Original nlp.exe exists, size: $(stat -c%s nlp.exe)"
-          md5sum nlp.exe
-        else
-          echo "Original nlp.exe does not exist"
-        fi
-        
-        if [ -f "libicutu.a" ]; then
-          echo "Original libicutu.a exists, size: $(stat -c%s libicutu.a)"
-          md5sum libicutu.a
-        else
-          echo "Original libicutu.a does not exist"
-        fi
-        
-        if [ -f "libicuuc.a" ]; then
-          echo "Original libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
-          md5sum libicuuc.a
-        else
-          echo "Original libicuuc.a does not exist"
-        fi
-        
-        # Check files in release-assets directory
-        echo "Downloaded file checksums:"
-        md5sum release-assets/nlp.exe
-        md5sum release-assets/libicutu.a
-        md5sum release-assets/libicuuc.a
 
-    # New step: Force remove binary files using git rm
+    # Force remove binary files using git rm
     - name: Force remove all binary files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
@@ -172,9 +159,9 @@ jobs:
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # Force remove binary files
+        # Force remove binary files and directories
         echo "Removing binary files using git rm to ensure they're properly tracked..."
-        git rm -f *.a nlp.exe || true
+        git rm -rf --ignore-unmatch *.a nlp.exe ubuntu-20.04 ubuntu-22.04 ubuntu-latest data || true
         git rm -f .version-flag || true
         
         # Commit the removal
@@ -184,46 +171,6 @@ jobs:
         # Verify files were removed
         echo "Current files after removal:"
         ls -la
-
-    - name: Copy assets to repository overwriting existing files
-      if: steps.check_tag.outputs.update_needed == 'true'
-      run: |
-        # First completely remove old files to avoid comparison issues
-        rm -rf *.a
-        rm -rf nlp.exe
-        rm -rf data
-        
-        # Copy new files
-        cp -r release-assets/* .
-        rm -rf release-assets
-        
-        # Verify files were copied
-        echo "After copying, verifying files exist:"
-        if [ -f "nlp.exe" ]; then
-          echo "New nlp.exe exists, size: $(stat -c%s nlp.exe)"
-        else
-          echo "ERROR: nlp.exe was not copied!"
-        fi
-        
-        if [ -f "libicutu.a" ]; then
-          echo "New libicutu.a exists, size: $(stat -c%s libicutu.a)"
-        else
-          echo "ERROR: libicutu.a was not copied!"
-        fi
-        
-        if [ -f "libicuuc.a" ]; then
-          echo "New libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
-        else
-          echo "ERROR: libicuuc.a was not copied!"
-        fi
-
-    - name: Debug after copy
-      if: steps.check_tag.outputs.update_needed == 'true'
-      run: |
-        echo "Files after copying:"
-        ls -la
-        echo "Git status:"
-        git status
 
     - name: Configure Git
       if: steps.check_tag.outputs.update_needed == 'true'
@@ -240,7 +187,7 @@ jobs:
       id: check_changes
       run: |
         # List all files for debugging
-        echo "Current files in repository (after copy):"
+        echo "Current files in repository (after extraction):"
         ls -la
         
         # Create a version flag file to force change detection
@@ -258,23 +205,6 @@ jobs:
         if git diff --staged --quiet; then
           echo "No changes detected in files"
           echo "has_changes=false" >> $GITHUB_OUTPUT
-          
-          # Extra debugging for binary files
-          echo "Comparing binary files manually:"
-          if [ -f "nlp.exe" ]; then
-            echo "nlp.exe exists, size: $(stat -c%s nlp.exe)"
-            md5sum nlp.exe
-          fi
-          
-          if [ -f "libicutu.a" ]; then
-            echo "libicutu.a exists, size: $(stat -c%s libicutu.a)"
-            md5sum libicutu.a
-          fi
-          
-          if [ -f "libicuuc.a" ]; then
-            echo "libicuuc.a exists, size: $(stat -c%s libicuuc.a)"
-            md5sum libicuuc.a
-          fi
         else
           echo "Changes detected in files"
           git diff --staged --name-status
@@ -325,7 +255,6 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
     - name: Report no changes
       if: steps.check_tag.outputs.update_needed == 'true' && steps.check_changes.outputs.has_changes != 'true' && github.event_name != 'workflow_dispatch'
