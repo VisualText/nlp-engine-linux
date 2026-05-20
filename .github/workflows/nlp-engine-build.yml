@@ -80,6 +80,17 @@ jobs:
               
               const engineZip = safeFindAsset('nlpengine.zip');
               core.setOutput('engineZip', engineZip.browser_download_url);
+
+              // Linux compile libraries (per Ubuntu version) — headers + static libs
+              // needed by scripts/compile-analyzer.sh and scripts/compile-kb.sh.
+              const compileLibs2004 = safeFindAsset('nlpengine-compile-libs-linux-20.04.zip');
+              core.setOutput('compileLibs2004', compileLibs2004.browser_download_url);
+
+              const compileLibs2204 = safeFindAsset('nlpengine-compile-libs-linux-22.04.zip');
+              core.setOutput('compileLibs2204', compileLibs2204.browser_download_url);
+
+              const compileLibsLatest = safeFindAsset('nlpengine-compile-libs-linux-latest.zip');
+              core.setOutput('compileLibsLatest', compileLibsLatest.browser_download_url);
             } catch (error) {
               console.log('Error occurred:');
               console.log(error);
@@ -118,12 +129,25 @@ jobs:
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
         mkdir -p release-assets
-        
+
         # Download all the required zip files
         wget "${{ steps.get_release.outputs.ubuntu2004Zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.ubuntu2204Zip }}" -P release-assets
         wget "${{ steps.get_release.outputs.ubuntuLatestZip }}" -P release-assets
         wget "${{ steps.get_release.outputs.engineZip }}" -P release-assets
+
+        # Compile libraries — optional: skip cleanly if upstream has not attached
+        # them to this release yet (URL will be empty for missing assets).
+        for url in \
+          "${{ steps.get_release.outputs.compileLibs2004 }}" \
+          "${{ steps.get_release.outputs.compileLibs2204 }}" \
+          "${{ steps.get_release.outputs.compileLibsLatest }}"; do
+          if [ -n "$url" ]; then
+            wget "$url" -P release-assets
+          else
+            echo "Compile-libs asset URL is empty — skipping (upstream release may not include it yet)"
+          fi
+        done
       shell: bash
 
     - name: Process Ubuntu packages and extract files
@@ -178,7 +202,32 @@ jobs:
         # Extract nlpengine.zip to the root directory
         echo "Extracting nlpengine.zip to root directory..."
         unzip -o release-assets/nlpengine.zip -d ./
-        
+
+        # Extract per-Ubuntu compile-libs into compile-libs/ubuntu-<version>/
+        # so that scripts/compile-analyzer.sh and scripts/compile-kb.sh can find
+        # the headers and static libraries they need to link a generated analyzer.
+        mkdir -p compile-libs
+        for version in 20.04 22.04 latest; do
+          zip_path="release-assets/nlpengine-compile-libs-linux-${version}.zip"
+          dest="compile-libs/ubuntu-${version}"
+          if [ -f "$zip_path" ]; then
+            echo "Extracting $zip_path -> $dest"
+            rm -rf "$dest"
+            mkdir -p "$dest"
+            unzip -o "$zip_path" -d "$dest"
+            # Some upstream packagers wrap contents in a top-level compile-libs/
+            # directory; flatten it so include/ and lib/ live at the version root.
+            if [ -d "$dest/compile-libs" ] && [ ! -d "$dest/include" ]; then
+              mv "$dest/compile-libs"/* "$dest/"
+              rmdir "$dest/compile-libs"
+            fi
+            echo "Files in $dest:"
+            ls -la "$dest"
+          else
+            echo "No compile-libs zip for $version — skipping"
+          fi
+        done
+
         # Clean up
         rm -rf release-assets
         
@@ -204,6 +253,7 @@ jobs:
         echo "Removing old binary files using git rm to ensure they're properly tracked..."
         git rm -f --ignore-unmatch *.a nlp.exe || true
         git rm -rf --ignore-unmatch ubuntu-20.04 ubuntu-22.04 ubuntu-latest || true
+        git rm -rf --ignore-unmatch compile-libs || true
         git rm -f .version-flag || true
         
         # Commit the removal
