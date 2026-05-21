@@ -1,3 +1,6 @@
 [submodule "python"]
 	path = python
 	url = https://github.com/VisualText/python
+[submodule "analyzer-templates"]
+	path = analyzer-templates
+	url = https://github.com/VisualText/analyzer-templates
