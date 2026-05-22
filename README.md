@@ -35,8 +35,7 @@ nlp-engine-linux/
 │   ├── nlpengine.py              `NLPEngine` class (subprocess wrapper)
 │   └── genHtmlHighlights.py      example: generate HTML highlights for analyzer output
 ├── scripts/
-│   ├── compile-analyzer.sh       compile an analyzer + KB into a native .so
-│   └── compile-kb.sh             rebuild only the KB into its own .so
+│   └── compile-analyzer.sh       compile the analyzer's KB into bin/kb.so
 └── README.md
 ```
 
@@ -139,14 +138,13 @@ nlp.analyzeInput("rfb", "text.txt", dev=True)
 
 [python/genHtmlHighlights.py](python/genHtmlHighlights.py) is a fuller example that runs an analyzer, then runs four "colorizer" analyzers over the result to emit syntax-highlighted HTML for the `.tree`, `.nlp`, `.dict`, and `.kbb` files.
 
-### 4. Compile an analyzer to a native shared library
+### 4. Compile an analyzer's KB to a native shared library
 
-By default `nlp.exe` runs analyzers interpreted from their `.nlp` spec files. For faster startup and execution, an analyzer (and its KB) can be compiled down to a native shared library that `nlp.exe -COMPILED` loads at runtime. Two scripts in [scripts/](scripts/) drive this end-to-end:
+By default `nlp.exe` runs analyzers fully interpreted. With the new `EMBEDED_KB`-enabled engine, the **knowledge base** can be compiled to a native shared library that the engine `dlopen`s at `-COMPILED` time and calls into via a single exported `kb_setup` symbol. (Analyzer pass code itself is still interpreted — upstream removed `ana_gen` in 1999, so there is no compiled-rules path; the engine falls back to interpreted execution for the rules.)
 
 | Script | What it does | Output |
 |--------|--------------|--------|
-| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` to emit `<analyzer>/run/*.cpp` and `<analyzer>/kb/*.cpp`, then generates a `CMakeLists.txt` that links them against the per-Ubuntu `compile-libs/` headers and static libraries. | `<analyzer>/<analyzer-name>.so` |
-| [scripts/compile-kb.sh](scripts/compile-kb.sh) | Runs `nlp.exe -COMPILEKB` (KB only — leaves analyzer rules untouched) and builds just `<analyzer>/kb/*.cpp`. | `<analyzer>/<analyzer-name>_kb.so` |
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` (emits `Cc_code.cpp` plus the `Sym*.cpp` / `Con*.cpp` / `Ptr*.cpp` / `St*.cpp` tables under `<analyzer>/kb/`), generates a one-line `kb_setup()` shim, and links everything into a single SHARED library against the per-Ubuntu `compile-libs/`. Only `kb_setup` is exported (`-fvisibility=hidden` everywhere else). | `<analyzer>/bin/kb.so` |
 
 Prerequisites: `cmake` ≥ 3.16 and a C++17-capable `g++`. On Ubuntu:
 
@@ -157,18 +155,30 @@ sudo apt install build-essential cmake
 Usage:
 
 ```bash
-# Compile the bundled rfb analyzer (defaults to ubuntu-latest binaries):
+# Compile the bundled rfb analyzer's KB (defaults to ubuntu-latest binaries):
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt
 
 # Pin a specific Ubuntu variant:
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt ubuntu-22.04
 
-# Run the compiled analyzer:
+# Run with the compiled KB (rules stay interpreted, KB is dlopen'd):
 LD_LIBRARY_PATH="$PWD/ubuntu-22.04:$LD_LIBRARY_PATH" \
   ./ubuntu-22.04/nlp.exe -COMPILED -ANA data/rfb -WORK . data/rfb/input/text.txt
 ```
 
-The compile-libs come from upstream — the workflow drops them into `compile-libs/ubuntu-<version>/{include,lib}/` alongside the runtime binaries.
+What you should see in the `-COMPILED` output for a successful round-trip:
+
+```
+[CG: Trying to load compiled KB.]
+[Loading compiled kb: data/rfb/bin/kb.so]
+[Loaded compiled kb library]
+[Loading compiled analyzer ...]
+[Error: Couldn't load compiled analyzer.]      # expected — no run.so exists
+[No compiled analyzer; falling back to interpreted.]
+... normal parse output ...
+```
+
+The compile-libs come from upstream's `nlpengine-compile-libs-linux-<ubuntu-ver>.zip` — the release workflow drops them into `compile-libs/ubuntu-<version>/{include,lib}/` alongside the runtime binaries.
 
 > **Note:** Ubuntu 20.04 ships dynamic ICU (`libicu*.so.66`) rather than static `libicu*.a`. If linking fails on the 20.04 variant, `sudo apt install libicu-dev` provides the development symlinks the linker needs.
 

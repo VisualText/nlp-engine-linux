@@ -1,0 +1,53 @@
+name: Update analyzer-templates Submodule
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [analyzer-templates-release]
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest analyzer-templates
+        id: update
+        run: |
+          git submodule update --init --remote -- analyzer-templates
+          cd analyzer-templates
+          new_sha=$(git rev-parse HEAD)
+          echo "new_sha=$new_sha" >> $GITHUB_OUTPUT
+          echo "Pulled analyzer-templates @ $new_sha"
+
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet -- analyzer-templates; then
+            echo "No submodule pointer change — already at latest"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Submodule pointer changed"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add analyzer-templates
+          git commit -m "Update analyzer-templates submodule to ${{ steps.update.outputs.new_sha }}"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report no changes
+        if: steps.check.outputs.changed != 'true'
+        run: echo "analyzer-templates is already at the latest commit — nothing to commit."
