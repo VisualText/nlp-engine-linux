@@ -35,7 +35,7 @@ nlp-engine-linux/
 │   ├── nlpengine.py              `NLPEngine` class (subprocess wrapper)
 │   └── genHtmlHighlights.py      example: generate HTML highlights for analyzer output
 ├── scripts/
-│   └── compile-analyzer.sh       compile the analyzer's KB into bin/kb.so
+│   └── compile-analyzer.sh       compile the analyzer (run+kb) into bin/run.so + bin/kb.so
 └── README.md
 ```
 
@@ -138,13 +138,22 @@ nlp.analyzeInput("rfb", "text.txt", dev=True)
 
 [python/genHtmlHighlights.py](python/genHtmlHighlights.py) is a fuller example that runs an analyzer, then runs four "colorizer" analyzers over the result to emit syntax-highlighted HTML for the `.tree`, `.nlp`, `.dict`, and `.kbb` files.
 
-### 4. Compile an analyzer's KB to a native shared library
+### 4. Compile an analyzer to native shared libraries
 
-By default `nlp.exe` runs analyzers fully interpreted. With the new `EMBEDED_KB`-enabled engine, the **knowledge base** can be compiled to a native shared library that the engine `dlopen`s at `-COMPILED` time and calls into via a single exported `kb_setup` symbol. (Analyzer pass code itself is still interpreted — upstream removed `ana_gen` in 1999, so there is no compiled-rules path; the engine falls back to interpreted execution for the rules.)
+By default `nlp.exe` runs analyzers fully interpreted from the `.nlp`
+source. With the engine's `-COMPILED` mode, both the **analyzer body**
+(the rule passes) and the **knowledge base** are compiled to native
+shared libraries that the engine `dlopen`s at runtime — the analyzer
+runs entirely from compiled code, so source edits to `.nlp` files
+between runs don't affect the output until you recompile.
 
 | Script | What it does | Output |
 |--------|--------------|--------|
-| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` (emits `Cc_code.cpp` plus the `Sym*.cpp` / `Con*.cpp` / `Ptr*.cpp` / `St*.cpp` tables under `<analyzer>/kb/`), generates a one-line `kb_setup()` shim, and links everything into a single SHARED library against the per-Ubuntu `compile-libs/`. Only `kb_setup` is exported (`-fvisibility=hidden` everywhere else). | `<analyzer>/bin/kb.so` |
+| [scripts/compile-analyzer.sh](scripts/compile-analyzer.sh) | Runs `nlp.exe -COMPILE` (emits the analyzer C++ trees under `<analyzer>/run/` and `<analyzer>/kb/`), then links everything into a single SHARED library against the per-Ubuntu `compile-libs/`. The library exports both `run_analyzer(Parse*)` and `kb_setup(void*)` (engine codegen emits both — see lite/seqn.cpp and consh/cc_gen.cpp). | `<analyzer>/bin/run.so`<br>`<analyzer>/bin/runu.so`<br>`<analyzer>/bin/kb.so`<br>`<analyzer>/bin/kbu.so` |
+
+The same library is staged under all four filenames so the engine's
+load paths find it whether it's looking for the ANSI or UNICODE
+build flavour ([lite/nlp.cpp:1242](https://github.com/VisualText/nlp-engine/blob/master/lite/nlp.cpp#L1242) / [cs/libconsh/cg.cpp:168](https://github.com/VisualText/nlp-engine/blob/master/cs/libconsh/cg.cpp#L168)).
 
 Prerequisites: `cmake` ≥ 3.16 and a C++17-capable `g++`. On Ubuntu:
 
@@ -155,32 +164,45 @@ sudo apt install build-essential cmake
 Usage:
 
 ```bash
-# Compile the bundled rfb analyzer's KB (defaults to ubuntu-latest binaries):
+# Default: full-analyzer compile (run + kb), defaults to ubuntu-latest:
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt
 
 # Pin a specific Ubuntu variant:
 ./scripts/compile-analyzer.sh data/rfb data/rfb/input/text.txt ubuntu-22.04
 
-# Run with the compiled KB (rules stay interpreted, KB is dlopen'd):
+# Legacy: KB-only compile (matches the pre-NLP-ENGINE-LINUX-026 behaviour):
+./scripts/compile-analyzer.sh --kb-only data/rfb data/rfb/input/text.txt
+
+# Run with the compiled artifacts:
 LD_LIBRARY_PATH="$PWD/ubuntu-22.04:$LD_LIBRARY_PATH" \
   ./ubuntu-22.04/nlp.exe -COMPILED -ANA data/rfb -WORK . data/rfb/input/text.txt
 ```
 
-What you should see in the `-COMPILED` output for a successful round-trip:
+What you should see in the `-COMPILED` output for a successful
+round-trip:
 
 ```
 [CG: Trying to load compiled KB.]
 [Loading compiled kb: data/rfb/bin/kb.so]
 [Loaded compiled kb library]
-[Loading compiled analyzer ...]
-[Error: Couldn't load compiled analyzer.]      # expected — no run.so exists
-[No compiled analyzer; falling back to interpreted.]
-... normal parse output ...
+[Loading compiled analyzer data/rfb/bin/run.so]
+[Loaded compiled analyzer]
+... parse output ...
 ```
 
-The compile-libs come from upstream's `nlpengine-compile-libs-linux-<ubuntu-ver>.zip` — the release workflow drops them into `compile-libs/ubuntu-<version>/{include,lib}/` alongside the runtime binaries.
+If you edit an `.nlp` file under `data/rfb/spec/` and re-run
+`-COMPILED` without re-running `compile-analyzer.sh`, the output
+should be **unchanged** — that's the proof the compiled libraries
+are doing the work, not the interpreter.
 
-> **Note:** Ubuntu 20.04 ships dynamic ICU (`libicu*.so.66`) rather than static `libicu*.a`. If linking fails on the 20.04 variant, `sudo apt install libicu-dev` provides the development symlinks the linker needs.
+The compile-libs come from upstream's `nlpengine-compile-libs-linux-<ubuntu-ver>.zip`
+— the release workflow drops them into `compile-libs/ubuntu-<version>/{include,lib}/`
+alongside the runtime binaries.
+
+> **Note:** Ubuntu 20.04 ships dynamic ICU (`libicu*.so.66`) rather than
+> static `libicu*.a`. If linking fails on the 20.04 variant,
+> `sudo apt install libicu-dev` provides the development symlinks the
+> linker needs.
 
 ## The `data/rfb` Analyzer
 
