@@ -123,14 +123,16 @@ Then in your script:
 from python.nlpengine import NLPEngine
 
 nlp = NLPEngine(engineDir=".", analyzersDir="data")
-nlp.analyzeInput("rfb", "text.txt", dev=True)
+nlp.analyzeFile("rfb", "text.txt", dev=True)
 ```
 
 `NLPEngine` provides a handful of helpers:
 
 | Method | Purpose |
 |--------|---------|
-| `analyzeInput(folder, textPath, dev=False)` | Run an analyzer over a file in its `input/` directory. Clears stale log directories first. |
+| `analyzeFile(folder, textPath, dev=False, compiled=False)` | Run an analyzer over a file in its `input/` directory. Clears stale log directories first. With `compiled=True`, loads `bin/run.<ext>` + `bin/kb.<ext>` instead of running interpreted (build those first via `compileLocal()` or `scripts/compile-analyzer.sh`). |
+| `compileAnalyzer(folder, inputTextPath=None, kbOnly=False)` | Run `nlp.exe -COMPILE` (or `-COMPILEKB`) to emit the analyzer's C++ source trees. |
+| `compileLocal(folder, inputTextPath, kbOnly=False, ubuntu="ubuntu-latest")` | Drive `scripts/compile-analyzer.sh` to do the full local build end-to-end, staging shared libraries into `<analyzer>/bin/`. |
 | `isAnalyzerFolder(folder)` | True if `folder` contains the required `spec/`, `input/`, and `kb/user/` subtrees. |
 | `clearLogFiles(folder)` | Remove every `*_log/` directory under the analyzer's `input/`. |
 | `createInputDir(analyzer, sub, clearFolder=True)` | Create (and optionally wipe) an input subdirectory. |
