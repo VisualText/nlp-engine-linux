@@ -150,6 +150,38 @@ jobs:
         done
       shell: bash
 
+    # Force remove individual binary files using git rm. Must run BEFORE
+    # the extraction step below, otherwise `git rm -rf compile-libs` /
+    # `git rm -rf ubuntu-*` will wipe the freshly-extracted directory
+    # trees from the working tree (git rm with -r removes BOTH the index
+    # and the on-disk files under the given path; the "untracked files
+    # survive git rm" assumption only holds for untracked files OUTSIDE
+    # the path being removed). This regression flip-flopped between
+    # losing compile-libs/ (v3.1.53) and losing ubuntu-*/ (v3.1.54)
+    # depending on which sub-dir cleanup raced first; mirroring the
+    # ordering nlp-engine-windows already uses fixes it deterministically.
+    - name: Force remove old binary files
+      if: steps.check_tag.outputs.update_needed == 'true'
+      run: |
+        # Configure git for commits
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+        # Force remove binary files - DO NOT REMOVE data directory!
+        echo "Removing old binary files using git rm to ensure they're properly tracked..."
+        git rm -f --ignore-unmatch *.a nlp.exe || true
+        git rm -rf --ignore-unmatch ubuntu-20.04 ubuntu-22.04 ubuntu-latest || true
+        git rm -rf --ignore-unmatch compile-libs || true
+        git rm -f .version-flag || true
+
+        # Commit the removal
+        git commit -m "Remove old binary files before update to ${{ steps.get_release.outputs.tag_name }}" || echo "Nothing to commit - files may not exist yet"
+        git push || echo "Nothing to push"
+
+        # Verify files were removed
+        echo "Current files after removal:"
+        ls -la
+
     - name: Process Ubuntu packages and extract files
       if: steps.check_tag.outputs.update_needed == 'true'
       run: |
@@ -240,29 +272,6 @@ jobs:
           echo "Files in data directory:"
           ls -la data
         fi
-
-    # Force remove individual binary files using git rm
-    - name: Force remove old binary files
-      if: steps.check_tag.outputs.update_needed == 'true'
-      run: |
-        # Configure git for commits
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        
-        # Force remove binary files - DO NOT REMOVE data directory!
-        echo "Removing old binary files using git rm to ensure they're properly tracked..."
-        git rm -f --ignore-unmatch *.a nlp.exe || true
-        git rm -rf --ignore-unmatch ubuntu-20.04 ubuntu-22.04 ubuntu-latest || true
-        git rm -rf --ignore-unmatch compile-libs || true
-        git rm -f .version-flag || true
-        
-        # Commit the removal
-        git commit -m "Remove old binary files before update to ${{ steps.get_release.outputs.tag_name }}" || echo "Nothing to commit - files may not exist yet"
-        git push || echo "Nothing to push"
-        
-        # Verify files were removed
-        echo "Current files after removal:"
-        ls -la
 
     - name: Configure Git
       if: steps.check_tag.outputs.update_needed == 'true'
