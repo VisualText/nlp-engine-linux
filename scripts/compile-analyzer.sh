@@ -55,14 +55,17 @@
 
 set -euo pipefail
 
-KB_ONLY=false
-while [ "${1:-}" = "--kb-only" ]; do
-  KB_ONLY=true
+MODE="full"
+while [ "${1:-}" = "--kb-only" ] || [ "${1:-}" = "--analyzer-only" ]; do
+  case "$1" in
+    --kb-only)       MODE="kb" ;;
+    --analyzer-only) MODE="ana" ;;
+  esac
   shift
 done
 
 if [ "$#" -lt 2 ]; then
-  echo "Usage: $0 [--kb-only] <analyzer-dir> <input-file> [ubuntu-version]" >&2
+  echo "Usage: $0 [--kb-only|--analyzer-only] <analyzer-dir> <input-file> [ubuntu-version]" >&2
   exit 64
 fi
 
@@ -92,15 +95,23 @@ fi
 
 export LD_LIBRARY_PATH="$REPO_ROOT/$UBUNTU:${LD_LIBRARY_PATH:-}"
 
-if [ "$KB_ONLY" = "true" ]; then
-  COMPILE_FLAG="-COMPILEKB"
-  TARGET_NAME="nlp_kb"
-  SRC_GLOB="kb"
-else
-  COMPILE_FLAG="-COMPILE"
-  TARGET_NAME="nlp_analyzer"
-  SRC_GLOB="run|kb"
-fi
+case "$MODE" in
+  kb)
+    COMPILE_FLAG="-COMPILEKB"
+    TARGET_NAME="nlp_kb"
+    SRC_GLOB="kb"
+    ;;
+  ana)
+    COMPILE_FLAG="-COMPILEANA"
+    TARGET_NAME="nlp_run"
+    SRC_GLOB="run"
+    ;;
+  *)
+    COMPILE_FLAG="-COMPILE"
+    TARGET_NAME="nlp_analyzer"
+    SRC_GLOB="run|kb"
+    ;;
+esac
 
 echo "==> [1/3] nlp.exe $COMPILE_FLAG  (emits .cpp trees under $ANALYZER_DIR/{$SRC_GLOB}/)"
 "$NLP_EXE" "$COMPILE_FLAG" -ANA "$ANALYZER_DIR" -WORK "$REPO_ROOT" "$INPUT_FILE"
@@ -124,11 +135,11 @@ EOF
 ENGINE_LIB_NAMES="prim kbm consh words lite"
 ICU_LIB_NAMES="icui18n icuuc icudata"
 
-if [ "$KB_ONLY" = "true" ]; then
-  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/kb/*.cpp\")"
-else
-  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\" \"$ANALYZER_DIR/kb/*.cpp\")"
-fi
+case "$MODE" in
+  kb)  GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/kb/*.cpp\")" ;;
+  ana) GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\")" ;;
+  *)   GLOB_LINES="file(GLOB GENERATED_CPP \"$ANALYZER_DIR/run/*.cpp\" \"$ANALYZER_DIR/kb/*.cpp\")" ;;
+esac
 
 echo "==> [2/3] Generate CMakeLists.txt"
 cat > "$SRC_DIR/CMakeLists.txt" <<EOF
@@ -209,17 +220,25 @@ fi
 # the UNICODE build flavour; copying them keeps both engine flavours
 # happy without a rebuild.
 echo "==> Staging $(basename "$OUT") into $ANALYZER_DIR/bin/"
-if [ "$KB_ONLY" = "true" ]; then
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kb.so"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.so"
-  STAGED="bin/kb.so bin/kbu.so"
-else
-  cp -f "$OUT" "$ANALYZER_DIR/bin/run.so"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/runu.so"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kb.so"
-  cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.so"
-  STAGED="bin/run.so bin/runu.so bin/kb.so bin/kbu.so"
-fi
+case "$MODE" in
+  kb)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kb.so"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.so"
+    STAGED="bin/kb.so bin/kbu.so"
+    ;;
+  ana)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/run.so"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/runu.so"
+    STAGED="bin/run.so bin/runu.so"
+    ;;
+  *)
+    cp -f "$OUT" "$ANALYZER_DIR/bin/run.so"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/runu.so"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kb.so"
+    cp -f "$OUT" "$ANALYZER_DIR/bin/kbu.so"
+    STAGED="bin/run.so bin/runu.so bin/kb.so bin/kbu.so"
+    ;;
+esac
 
 echo
 echo "Built: $OUT"
