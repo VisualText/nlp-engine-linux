@@ -17,7 +17,7 @@ The NLP Engine is distributed per platform. Pick the one that matches your OS:
 | macOS    | [VisualText/nlp-engine-mac](https://github.com/VisualText/nlp-engine-mac) |
 | Source   | [VisualText/nlp-engine](https://github.com/VisualText/nlp-engine) |
 
-For production use from Python, prefer the [NLPPlus Python package](https://github.com/VisualText/py-package-nlpengine) instead of the simple wrapper shipped here.
+For production use from Python, prefer the [NLPPlus Python package](https://pypi.org/project/NLPPlus/) instead of the simple wrapper shipped here.
 
 ## Repository Layout
 
