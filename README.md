@@ -1,5 +1,7 @@
 # NLP Engine for Linux
 
+[![PyPI: NLPPlus](https://img.shields.io/pypi/v/NLPPlus?label=PyPI%20NLPPlus&logo=pypi&logoColor=white)](https://pypi.org/project/NLPPlus/) [![npm: nlpplus](https://img.shields.io/npm/v/nlpplus?label=npm%20nlpplus&logo=npm)](https://www.npmjs.com/package/nlpplus)
+
 This repository packages the [VisualText NLP Engine](https://github.com/VisualText/nlp-engine) (`nlp.exe`) as a ready-to-run binary distribution for Linux. It mirrors the latest release from the upstream `VisualText/nlp-engine` repository, rebuilds it for multiple Ubuntu targets, and ships the binaries together with the supporting data files and a small Python wrapper.
 
 If you just want the Linux executable to run NLP++ analyzers on your machine, this is the repository you want.
